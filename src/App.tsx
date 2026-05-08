@@ -16,7 +16,12 @@ import {
   XCircle,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { fetchEntityManagementEntity, type EntityManagementEntity } from './api/entityManagement';
+import {
+  fetchEntityManagementEntity,
+  fetchEntityManagementSearch,
+  type EntityManagementEntity,
+  type EntityManagementSearchResult,
+} from './api/entityManagement';
 import { buildRadarOnlyTopic, fetchHotTopicRadar } from './api/hotTopicRadar';
 import {
   fetchCategory,
@@ -109,8 +114,6 @@ function mergeTagomaticProfiles(topics: TopicRecord[], profiles: TagomaticTopic[
           id: ref.ref_id || String(ref.id || ''),
         })),
     ];
-    const externalPages = buildExternalRefLinks(profile.external_refs || []);
-
     return {
       ...topic,
       name: profile.short_name || profile.term || topic.name,
@@ -121,7 +124,6 @@ function mergeTagomaticProfiles(topics: TopicRecord[], profiles: TagomaticTopic[
       visible: profile.is_visible ?? topic.visible,
       confidenceScore: confidenceScore ?? topic.confidenceScore,
       linkedEntities: externalLinks.length > 0 ? externalLinks : topic.linkedEntities,
-      existingPages: externalPages.length > 0 ? externalPages : topic.existingPages,
     };
   });
 }
@@ -164,26 +166,52 @@ function mergeHotTopicRadarMatches(topics: TopicRecord[], matchesByTopicId: Map<
   return merged;
 }
 
-function extractGuid(value = '') {
-  return value.match(/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i)?.[0];
+function mergeEntitySearchResults(
+  topics: TopicRecord[],
+  topicId: string,
+  query: string,
+  results: EntityManagementSearchResult[],
+) {
+  const entityLinks = buildEntitySearchLinks(results, query);
+
+  return topics.map((topic) => {
+    if (topic.id !== topicId) return topic;
+
+    return {
+      ...topic,
+      existingPages: entityLinks.length > 0 ? entityLinks : topic.existingPages,
+    };
+  });
 }
 
-function buildExternalRefLinks(refs: NonNullable<TagomaticTopic['external_refs']>) {
-  return refs
-    .filter((ref) => isDisplayableExternalRefType(ref.ref_type))
-    .map((ref) => {
-      const refType = humanizeRefType(ref.ref_type || 'External ID');
-      const refId = ref.ref_id || '';
-      const guid = extractGuid(refId);
-      const entityId = guid || refId;
+function buildEntitySearchLinks(results: EntityManagementSearchResult[], query: string) {
+  const normalizedQuery = normalizeSearchText(query);
+  const seenEntityIds = new Set<string>();
 
-      return {
-        type: refType,
-        title: refType,
-        refId,
-        url: entityId ? `https://entity-management.siriusxm.com/entity/${entityId}` : undefined,
-      };
-    });
+  return results
+    .filter((result) => getEntitySearchId(result) && result.name && isDisplayableEntitySearchType(result.type))
+    .filter((result) => {
+      const key = getEntitySearchId(result).toLowerCase();
+      if (seenEntityIds.has(key)) return false;
+      seenEntityIds.add(key);
+      return true;
+    })
+    .sort((left, right) => {
+      const leftExact = normalizeSearchText(left.name) === normalizedQuery ? 1 : 0;
+      const rightExact = normalizeSearchText(right.name) === normalizedQuery ? 1 : 0;
+      if (leftExact !== rightExact) return rightExact - leftExact;
+      return getEntityTypePriority(left.type) - getEntityTypePriority(right.type);
+    })
+    .map((result) => ({
+      type: getEntitySearchTypeLabel(result.type),
+      title: result.name,
+      refId: getEntitySearchId(result),
+      url: `https://entity-management.siriusxm.com/entity/${getEntitySearchId(result)}`,
+    }));
+}
+
+function getEntitySearchId(result: EntityManagementSearchResult) {
+  return result.entityId || result.sourceId || '';
 }
 
 function humanizeRefType(value: string) {
@@ -193,9 +221,38 @@ function humanizeRefType(value: string) {
     .trim();
 }
 
-function isDisplayableExternalRefType(value = '') {
+function normalizeSearchText(value = '') {
+  return value.trim().toLowerCase();
+}
+
+function isDisplayableEntitySearchType(value = '') {
+  return ['league', 'team', 'brand', 'talent', 'genre'].includes(normalizeEntitySearchType(value));
+}
+
+function getEntityTypePriority(value = '') {
+  const normalized = normalizeEntitySearchType(value);
+  const priority = ['talent', 'brand', 'team', 'league', 'genre'].indexOf(normalized);
+  return priority === -1 ? 99 : priority;
+}
+
+function getEntitySearchTypeLabel(value = '') {
+  const normalized = normalizeEntitySearchType(value);
+  const labels: Record<string, string> = {
+    talent: 'Talent',
+    brand: 'Brand',
+    team: 'Sports Team',
+    league: 'Sports League',
+    genre: 'Genre',
+  };
+
+  return labels[normalized] || humanizeRefType(value || 'Entity');
+}
+
+function normalizeEntitySearchType(value = '') {
   const normalized = value.replace(/[\s_-]+/g, '').toLowerCase();
-  return ['sportsleague', 'sportsteam', 'brand', 'talent', 'genre'].includes(normalized);
+  if (normalized === 'sportsteam') return 'team';
+  if (normalized === 'sportsleague') return 'league';
+  return normalized;
 }
 
 function downloadCsv(records: TopicRecord[]) {
@@ -448,22 +505,24 @@ function DetailPanel({
       <section className="detail-section">
         <div className="section-title">
           <ExternalLink size={16} />
-          <h3>Existing Pages / External IDs</h3>
+          <h3>Existing Pages / Entity Links</h3>
         </div>
         <div className="page-list">
           {topic.existingPages.map((page) => (
             page.url ? (
               <a key={`${page.type}-${page.refId || page.title}`} href={page.url} target="_blank" rel="noreferrer">
+                <span>{page.type}</span>
                 <strong>{page.title}</strong>
                 <ExternalLink size={14} />
               </a>
             ) : (
               <div key={`${page.type}-${page.refId || page.title}`} className="page-static">
+                <span>{page.type}</span>
                 <strong>{page.title}</strong>
               </div>
             )
           ))}
-          {topic.existingPages.length === 0 && <span>No external page IDs</span>}
+          {topic.existingPages.length === 0 && <span>No entity links found</span>}
         </div>
       </section>
 
@@ -639,6 +698,7 @@ export default function App() {
   });
   const initialHydrationStarted = useRef(false);
   const entityFetchedIds = useRef(new Set<string>());
+  const entitySearchFetchedKeys = useRef(new Set<string>());
 
   const taxonomies = useMemo(
     () => Array.from(new Set(topics.map((topic) => topic.taxonomy))).sort(),
@@ -690,6 +750,24 @@ export default function App() {
         entityFetchedIds.current.delete(selectedTopic.id);
       });
   }, [selectedTopic?.id]);
+
+  useEffect(() => {
+    const topicId = selectedTopic?.id;
+    const topicName = selectedTopic?.name?.trim();
+    if (!topicId || !topicName) return;
+
+    const searchKey = `${topicId}:${topicName.toLowerCase()}`;
+    if (entitySearchFetchedKeys.current.has(searchKey)) return;
+
+    entitySearchFetchedKeys.current.add(searchKey);
+    fetchEntityManagementSearch(topicName)
+      .then((results) => {
+        setTopics((current) => mergeEntitySearchResults(current, topicId, topicName, results));
+      })
+      .catch(() => {
+        entitySearchFetchedKeys.current.delete(searchKey);
+      });
+  }, [selectedTopic?.id, selectedTopic?.name]);
 
   const summary = useMemo(() => {
     const ready = filteredTopics.filter((topic) => getReadiness(topic) === 'Ready').length;

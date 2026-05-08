@@ -770,15 +770,25 @@ select {
   min-width: 0;
 }
 
+.page-list a span,
+.page-static span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 850;
+  grid-column: 1;
+  text-transform: uppercase;
+}
+
 .page-list a strong,
 .page-static strong {
+  grid-column: 1;
   min-width: 0;
   overflow-wrap: anywhere;
 }
 
 .page-list a svg {
   grid-column: 2;
-  grid-row: 1;
+  grid-row: 1 / span 2;
 }
 
 .content-list {
