@@ -1,5 +1,7 @@
 import {
   ArrowDownUp,
+  ChevronDown,
+  ChevronUp,
   CheckCircle2,
   Download,
   ExternalLink,
@@ -455,9 +457,16 @@ function DetailPanel({
   const readiness = getReadiness(topic);
   const gaps = getGapReasons(topic);
   const tier = getMomentumTier(topic.momentumScore);
+  const [entityLinksExpanded, setEntityLinksExpanded] = useState(false);
+  const visibleExistingPages = entityLinksExpanded ? topic.existingPages : topic.existingPages.slice(0, 2);
+  const hiddenExistingPageCount = Math.max(0, topic.existingPages.length - visibleExistingPages.length);
   const tagrUrl = `https://goliath.savagebeast.com/tagr/topic/${encodeURIComponent(topic.id).replace(/%3A/gi, ':')}`;
   const entityDetailUrl = `https://entity-management.siriusxm.com/entity/${encodeURIComponent(topic.id).replace(/%3A/gi, ':')}`;
   const coverageDetailUrl = `https://entity-management.siriusxm.com/coverage/${encodeURIComponent(topic.id).replace(/%3A/gi, ':')}`;
+
+  useEffect(() => {
+    setEntityLinksExpanded(false);
+  }, [topic.id]);
 
   return (
     <aside className="detail-panel">
@@ -508,7 +517,7 @@ function DetailPanel({
           <h3>Existing Pages / Entity Links</h3>
         </div>
         <div className="page-list">
-          {topic.existingPages.map((page) => (
+          {visibleExistingPages.map((page) => (
             page.url ? (
               <a key={`${page.type}-${page.refId || page.title}`} href={page.url} target="_blank" rel="noreferrer">
                 <span>{page.type}</span>
@@ -522,6 +531,25 @@ function DetailPanel({
               </div>
             )
           ))}
+          {topic.existingPages.length > 2 && (
+            <button
+              className="link-toggle-button"
+              type="button"
+              onClick={() => setEntityLinksExpanded((expanded) => !expanded)}
+            >
+              {entityLinksExpanded ? (
+                <>
+                  <ChevronUp size={15} />
+                  Show fewer
+                </>
+              ) : (
+                <>
+                  <ChevronDown size={15} />
+                  Show {hiddenExistingPageCount} more
+                </>
+              )}
+            </button>
+          )}
           {topic.existingPages.length === 0 && <span>No entity links found</span>}
         </div>
       </section>

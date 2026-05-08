@@ -507,8 +507,12 @@ select {
 }
 
 .detail-panel {
+  max-height: calc(100vh - 28px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 16px;
   position: sticky;
+  scrollbar-gutter: stable;
   top: 14px;
 }
 
@@ -791,6 +795,25 @@ select {
   grid-row: 1 / span 2;
 }
 
+.link-toggle-button {
+  align-items: center;
+  align-self: flex-start;
+  background: #f4f6f7;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: #20262d;
+  display: inline-flex;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 9px;
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
+.link-toggle-button svg {
+  color: var(--teal);
+}
+
 .content-list {
   display: flex;
   flex-direction: column;
@@ -885,6 +908,8 @@ select {
   }
 
   .detail-panel {
+    max-height: none;
+    overflow: visible;
     position: static;
   }
 
