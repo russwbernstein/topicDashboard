@@ -1,4 +1,4 @@
-import csv from '../../top500topics.csv?raw';
+import csv from './tousandtopics0501.csv?raw';
 import type { TopicRecord } from '../types/topic';
 
 interface CsvTopicRow {
@@ -33,17 +33,29 @@ function parseCsvLine(line: string) {
   return cells.map((cell) => cell.trim());
 }
 
+function getColumnIndex(headers: string[], candidates: string[], fallback: number) {
+  const normalizedHeaders = headers.map((header) => header.trim().toLowerCase());
+  const index = candidates.findIndex((candidate) => normalizedHeaders.includes(candidate.toLowerCase()));
+
+  if (index === -1) return fallback;
+  return normalizedHeaders.indexOf(candidates[index].toLowerCase());
+}
+
 function parseTopics(rawCsv: string): CsvTopicRow[] {
-  return rawCsv
-    .trim()
-    .split(/\r?\n/)
+  const lines = rawCsv.trim().split(/\r?\n/);
+  const headers = parseCsvLine(lines[0] || '');
+  const idIndex = getColumnIndex(headers, ['pandora_topic_id', 'topic_id', 'id'], 1);
+  const nameIndex = getColumnIndex(headers, ['topic_term', 'term', 'name'], 0);
+  const volumeIndex = getColumnIndex(headers, ['cnt', 'volume', 'tag_volume'], 2);
+
+  return lines
     .slice(1)
     .map(parseCsvLine)
-    .filter(([name, id]) => name && id)
-    .map(([name, id, volume]) => ({
-      name,
-      id,
-      volume: Number.parseInt(volume || '0', 10) || 0,
+    .filter((cells) => cells[nameIndex] && cells[idIndex])
+    .map((cells) => ({
+      name: cells[nameIndex],
+      id: cells[idIndex],
+      volume: Number.parseInt(cells[volumeIndex] || '0', 10) || 0,
     }));
 }
 
